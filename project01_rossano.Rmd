@@ -1,0 +1,178 @@
+---
+output: html_document
+---
+[comment]: <> (Rossano Marchetti Ramos / 10/10/2016)
+
+# Reproducible Research - Johns Hopkins / Coursera
+# Peer-graded Assignment: Course Project 1
+
+## 1. Code for reading in the dataset and/or processing the data
+
+```{r inicial}
+################################################################################################
+#
+#           INSTRUCTIONS
+#
+#-----------------------------------------------------------------------------------------------
+#
+#    Dataset: Activity monitoring data [52K]
+# 
+# The variables included in this dataset are:
+#
+#    steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+#    date: The date on which the measurement was taken in YYYY-MM-DD format
+#    interval: Identifier for the 5-minute interval in which measurement was taken
+#
+################################################################################################
+
+# globl options
+knitr::opts_chunk$set(echo=TRUE)
+
+# -----------------------------------------------------------------
+# 1. Code for reading in the dataset and/or processing the data
+# -----------------------------------------------------------------
+files <- dir()
+
+#download and open file
+if (sum(grepl("activity.csv", files)) == 0) {
+    # .csv file hadn't been downloaded before
+    if (sum(grepl("activity.zip", files))  == 0) {
+        # .zip hadn't been downloaded before
+        download.file(url = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip",
+                      destfile = "activity.zip")
+        unzip("activity.zip")
+    }
+}
+rm(files)
+
+activNAs <- read.csv("activity.csv")
+# transform 'date' class
+activNAs$date <- as.Date(activNAs$date,"%Y-%m-%d")
+
+# remove NA's. There is NA's in the column 'steps'
+activ <- activNAs[complete.cases(activNAs),]
+```
+
+## 2. Total number of steps taken each day
+
+```{r Histogram, fig.height=3.5, fig.width=5.5, dpi = 300}
+# -----------------------------------------------------------------
+# 2. Histogram of the total number of steps taken each day
+# -----------------------------------------------------------------
+d01 <- data.frame(date  = unique(activ$date), 
+                  steps =  NA)
+d01$steps <- sapply(d01$date, function(i)
+    sum(activ$steps[activ$date == i]))
+
+hist(d01$steps, main = "Histogram of the total number of steps taken each day",
+     xlab = "number of steps", cex.main = 1)
+```
+
+## 3. The Mean and median number of steps taken each day are, respectively, `r format(mean(d01$steps), digits = 1)` and `r median(d01$steps)`.
+
+## 4. Time series plot of the average number of steps taken
+
+```{r TimeSeries, fig.height=3.5, fig.width=5.5, dpi = 300}
+# -----------------------------------------------------------------
+# 4. 
+# -----------------------------------------------------------------
+d02 <- data.frame(interval = unique(activ$interval), 
+                  av.steps = NA,
+                  seq.interval = 0:287)
+# calculate mean steps in each interval
+d02$av.steps <- sapply(d02$interval, function(i)
+    mean(activ$steps[activ$interval == i]))
+# seq of 5 min intervals: from 0 to 287 == 0:00 to 23:55
+d02$hour <- d02$seq.interval*5/60
+
+plot(av.steps ~ hour, type = "l", data = d02, 
+     main = "Average number of steps taken during the day\n(5 min interval)",
+     xlab = "time of the day (in hours)", ylab = "steps (average number)",
+     cex.main = 1)
+```
+
+```{r MaxSteps}
+# -----------------------------------------------------------------
+# 5. 
+# -----------------------------------------------------------------
+max.steps <- which(max(d02$av.steps) == d02$av.steps)
+
+# function that transforms dec hour in %H:%M format
+# http://stackoverflow.com/questions/14483629/how-convert-decimal-to-posix-time
+to.time <- function (x) {
+    paste(floor(x), 
+          round((x-floor(x))*60), 
+          sep=":")
+}
+```
+
+## 5. The 5-minute interval that, on average, contains the maximum number of steps starts at  `r to.time(d02$hour[max.steps])`.
+
+## 6. Code to describe and show a strategy for imputing missing data
+```{r ImputingNAs}
+# -----------------------------------------------------------------
+# 6. 
+# -----------------------------------------------------------------
+# creat a new variable and imput # of steps using
+# the average steps 
+activNAs$steps.new <- activNAs$steps
+NAs.founded <- which(is.na(activNAs$steps))
+activNAs$steps.new[NAs.founded] <- 
+    sapply(activNAs$interval[NAs.founded], function(interval.NA) {
+        d02$av.steps[d02$interval == interval.NA]})
+    
+# 
+d03 <- data.frame(date      = unique(activ$date), 
+                  steps.new =  NA)
+d03$steps.new <- sapply(d03$date, function(i)
+    sum(activNAs$steps.new[activNAs$date == i]))
+```
+
+# 7. Histogram of the total number of steps taken each day after missing values are imputed.
+
+```{r ImputingNAs_results, fig.height=3.5, fig.width=5.5, dpi = 300}
+# -----------------------------------------------------------------
+# 7. 
+# -----------------------------------------------------------------
+hist(d03$steps.new, main = "Histogram of the total number of steps taken each day\n (imputed NAs values)", xlab = "number of steps",cex.main = 1)
+```
+
+After imputing values for NAs, the mean and median number of steps taken each day are, respectively, `r format(mean(d03$steps.new), digits = 1)` and `r format(median(d03$steps.new), digits = 1)` (without NAs the values were `r format(mean(d01$steps), digits = 1)` and `r median(d01$steps)`).
+
+# 8. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends
+```{r PanelPlot, fig.height=8, fig.width=7.5, dpi = 300}
+# -----------------------------------------------------------------
+# 8. 
+# -----------------------------------------------------------------
+activ$type <- as.factor(
+        ifelse(weekdays(activ$date) %in% c("domingo", "sábado"), 
+           "weekend", "weekday"))
+
+dweekday <- data.frame(interval = unique(activ$interval), 
+                       av.steps = NA,
+                       seq.interval = 0:287)
+dweekend <- data.frame(interval = unique(activ$interval), 
+                       av.steps = NA,
+                       seq.interval = 0:287)
+
+# calculate mean steps in each interval
+dweekday$av.steps <- sapply(dweekday$interval, function(i)
+    mean(activ$steps[activ$type == "weekday" & activ$interval == i]))
+dweekend$av.steps <- sapply(dweekend$interval, function(i)
+    mean(activ$steps[activ$type == "weekend" & activ$interval == i]))
+
+# seq of 5 min intervals: from 0 to 287 == 0:00 to 23:55
+dweekday$hour <- dweekday$hour <- dweekday$seq.interval*5/60
+dweekend$hour <- dweekend$hour <- dweekend$seq.interval*5/60
+
+par(mfrow = c(2, 1), mar = c(5.1, 4.1, 1, 2.1 ))
+plot(av.steps ~ hour, type = "l", data = dweekday, 
+     xlab = "time of the day (in hours)", ylab = "steps (average number)")
+mtext("Weekday", side = 3, line = -1)
+plot(av.steps ~ hour, type = "l", data = dweekend, 
+     xlab = "time of the day (in hours)", ylab = "steps (average number)")
+mtext("Weekend", side = 3, line = -1)
+mtext("Average number of steps taken during the day (5 min interval)", 
+      side = 3, outer = T, line = -1, font = 2)
+```
+
